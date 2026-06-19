@@ -17,5 +17,21 @@
   "devDependencies": {
     "prettier": "^3.3.3",
     "autocannon": "^7.14.0"
-  }
+  },
+  "description": "Build a minimal production-leaning service that can **handle load**, **rate limit**, and **avoid duplicates** via idempotency.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Companio-Org/be-internships-may-26.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Companio-Org/be-internships-may-26/issues"
+  },
+  "homepage": "https://github.com/Companio-Org/be-internships-may-26#readme"
 }
