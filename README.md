@@ -2,33 +2,71 @@
 
 Build a minimal production-leaning service that can **handle load**, **rate limit**, and **avoid duplicates** via idempotency.
 
-## Endpoints (to keep)
+## Endpoints
+
 - `POST /v1/signals`
   - body: `{ "userId": "string", "type": "string", "payload": "string" }`
   - headers: `X-API-Key`, `Idempotency-Key` (optional)
   - behaviors:
     - **Rate limit** per `userId`: `RATE_LIMIT_PER_MIN` per minute (default 5).
-    - **Idempotency**: same `Idempotency-Key` should not create duplicates.
+    - **Idempotency**: same `Idempotency-Key` returns the same resource — safe under concurrency.
 - `GET /v1/signals?userId=...&limit=...`
 - `GET /healthz`
 
-## Your Tasks
-1. **Implement a robust rate limiter** in `src/rateLimit.js`.
-2. **Make idempotency safe across scale** in `src/signals.js`.
-3. **Handle DB failure** gracefully with retry/backoff.
-4. **Think for 10k RPS.** Add a `SCALE.md`.
-5. **Finish the tests** in `tests/*.test.js`.
+## Implementation highlights
 
-## Deliverables
-- Working service, passing tests, updated README, SCALE.md.
-- Optional deploy link.
----
+### Rate limiter (`src/rateLimit.js`)
 
-## Extra Production Constraints (must pass)
+Sliding-window log per user — timestamps within the last 60 s are kept in a `Map<userId, number[]>`.  
+On each request: evict stale timestamps, check count < RATE, push if allowed.  
+Stale entries are evicted every 5 min to prevent unbounded memory growth.  
+**Multi-instance path:** replace the Map with a Redis sorted-set Lua script (see SCALE.md).
 
-- **Atomic Idempotency:** Survive concurrent requests and restarts. Avoid check-then-insert races; use a DB-level unique constraint or atomic upsert pattern. Return the same resource for identical `Idempotency-Key`.
-- **Concurrency-Safe Rate Limit:** Must behave correctly under burst and parallel calls. Naive in-memory counters that race will fail hidden checks. Explain how this becomes multi-instance safe.
-- **Transient DB Failures:** Implement retry/backoff (with jitter) or circuit breaker when DB errors occur (we simulate via `DB_FAIL_RATE`). No duplicates on retry.
-- **Scale Plan (10k RPS):** Fill `SCALE.md` with a clear, concise approach (indexes, pooling, caching, queues, horizontal scale, idempotency store).
+### Idempotency (`src/signals.js` + `src/db.js`)
 
-> We will run additional **hidden concurrency/multi-instance tests** during evaluation.
+`upsertSignal` uses `INSERT OR IGNORE` on the `idempotency_key UNIQUE` column, then `SELECT`.  
+This is **atomic at the DB level** — concurrent requests for the same key never create duplicates, even without application-level locks.  
+The caller always receives the canonical row.
+
+### Retry / back-off (`src/signals.js`)
+
+All DB calls are wrapped in `withRetry(fn, maxRetries=3)`:
+- Catches `SQLITE_BUSY` / `SQLITE_LOCKED` / simulated failures.
+- Exponential back-off with full jitter: `delay = random() * BASE * 2^attempt`.
+- Non-transient errors are re-thrown immediately.
+- No duplicate risk on retry because idempotency is enforced at the DB level.
+
+## Setup
+
+```bash
+# We recommend using Node v20/v22 LTS (specified in .nvmrc) to avoid native build issues with better-sqlite3.
+nvm use
+cp .env.example .env        # set API_KEY, DATABASE_URL, RATE_LIMIT_PER_MIN
+npm install
+npm run dev                 # starts on PORT (default 8080)
+```
+
+## Tests
+
+```bash
+npm test                    # runs tests/idempotency.test.js & tests/rate-limit.test.js
+```
+
+## Benchmark
+
+```bash
+npm run dev &
+npm run bench
+```
+
+## Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `API_KEY` | `change-me` | Required header value for `X-API-Key` |
+| `PORT` | `8080` | Listening port |
+| `DATABASE_URL` | `./data/signals.db` | SQLite DB path |
+| `RATE_LIMIT_PER_MIN` | `5` | Max requests per user per 60 s |
+| `DB_FAIL_RATE` | `0` | Fraction of DB calls to simulate failure (0–1) |
+
+See [SCALE.md](./SCALE.md) for the 10 k RPS architecture and cost breakdown.
