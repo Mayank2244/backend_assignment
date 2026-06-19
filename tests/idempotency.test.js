@@ -6,9 +6,25 @@ import http from 'node:http';
 
 test('idempotency returns same resource for same key', async () => {
   const proc = spawn('node', ['src/server.js'], { env: { ...process.env, API_KEY: 'k', PORT: '9091' } });
-  await wait(300);
-
   const base = 'http://localhost:9091';
+
+  // Wait for server to be ready
+  for (let i = 0; i < 20; i++) {
+    try {
+      await new Promise((res, rej) => {
+        const req = http.get(`${base}/healthz`, (r) => {
+          if (r.statusCode === 200) res();
+          else rej();
+        });
+        req.on('error', rej);
+        req.end();
+      });
+      break;
+    } catch {
+      await wait(100);
+    }
+  }
+
   const idem = 'same-key';
 
   const a = await postJson(`${base}/v1/signals`, {

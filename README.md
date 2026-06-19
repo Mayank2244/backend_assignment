@@ -39,6 +39,8 @@ All DB calls are wrapped in `withRetry(fn, maxRetries=3)`:
 ## Setup
 
 ```bash
+# We recommend using Node v20/v22 LTS (specified in .nvmrc) to avoid native build issues with better-sqlite3.
+nvm use
 cp .env.example .env        # set API_KEY, DATABASE_URL, RATE_LIMIT_PER_MIN
 npm install
 npm run dev                 # starts on PORT (default 8080)
