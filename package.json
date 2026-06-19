@@ -12,11 +12,12 @@
   "dependencies": {
     "better-sqlite3": "^9.4.0",
     "dotenv": "^16.4.5",
+    "express": "^5.2.1",
     "fastify": "^4.28.1"
   },
   "devDependencies": {
-    "prettier": "^3.3.3",
-    "autocannon": "^7.14.0"
+    "autocannon": "^7.14.0",
+    "prettier": "^3.3.3"
   },
   "description": "Build a minimal production-leaning service that can **handle load**, **rate limit**, and **avoid duplicates** via idempotency.",
   "main": "index.js",
